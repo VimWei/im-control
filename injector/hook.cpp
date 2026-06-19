@@ -126,7 +126,60 @@ extern "C" __declspec(dllexport) LRESULT CALLBACK IMControl_WndProcHook(int nCod
                 g_pSharedData->guidProfile = prevProfile.guidProfile;
             }
 
-            if ((g_pSharedData->verb == VERB_SWITCH) && (g_pSharedData->keyboardOpenClose || g_pSharedData->conversionModeNative)) {
+            if (g_pSharedData->getKeyboardState) {
+                ITfThreadMgr* pThreadMgrGet = NULL;
+                ITfCompartmentMgr* pCompartmentMgrGet = nullptr;
+
+                HRESULT hrGet = CoCreateInstance(CLSID_TF_ThreadMgr,
+                                                  NULL,
+                                                  CLSCTX_INPROC_SERVER,
+                                                  IID_ITfThreadMgr,
+                                                  (void**)&pThreadMgrGet);
+                if (SUCCEEDED(hrGet)) {
+                    hrGet = pThreadMgrGet->QueryInterface(IID_ITfCompartmentMgr, (void**)&pCompartmentMgrGet);
+                }
+
+                if (SUCCEEDED(hrGet)) {
+                    ITfCompartment* keyboardOpenCloseCompartment = nullptr;
+                    hrGet = pCompartmentMgrGet->GetCompartment(GUID_COMPARTMENT_KEYBOARD_OPENCLOSE, &keyboardOpenCloseCompartment);
+                    if (SUCCEEDED(hrGet)) {
+                        VARIANT varKeyboardOpenClose;
+                        VariantInit(&varKeyboardOpenClose);
+                        hrGet = keyboardOpenCloseCompartment->GetValue(&varKeyboardOpenClose);
+                        if (SUCCEEDED(hrGet)) {
+                            g_pSharedData->keyboardOpenClose = (varKeyboardOpenClose.lVal != 0);
+                        }
+                        VariantClear(&varKeyboardOpenClose);
+                        keyboardOpenCloseCompartment->Release();
+                    }
+                }
+
+                if (SUCCEEDED(hrGet)) {
+                    ITfCompartment* conversionCompartment = nullptr;
+                    hrGet = pCompartmentMgrGet->GetCompartment(GUID_COMPARTMENT_KEYBOARD_INPUTMODE_CONVERSION, &conversionCompartment);
+                    if (SUCCEEDED(hrGet)) {
+                        VARIANT varConv;
+                        VariantInit(&varConv);
+                        hrGet = conversionCompartment->GetValue(&varConv);
+                        if (SUCCEEDED(hrGet)) {
+                            g_pSharedData->conversionModeNative = (varConv.lVal & TF_CONVERSIONMODE_NATIVE) != 0;
+                        }
+                        VariantClear(&varConv);
+                        conversionCompartment->Release();
+                    }
+                }
+
+                if (pCompartmentMgrGet) {
+                    pCompartmentMgrGet->Release();
+                }
+                if (pThreadMgrGet) {
+                    pThreadMgrGet->Release();
+                }
+                // Restore hr to previous value so get-keyboard failures don't affect overall success
+                hr = S_OK;
+            }
+
+            if ((g_pSharedData->verb == VERB_SWITCH) && !g_pSharedData->getKeyboardState && (g_pSharedData->keyboardOpenClose || g_pSharedData->conversionModeNative)) {
                 hr = CoCreateInstance(CLSID_TF_ThreadMgr,
                                       NULL,
                                       CLSCTX_INPROC_SERVER,

@@ -10,7 +10,7 @@
 #include "version.hpp"
 
 int printUsage(const char* exeName) {
-    println("Usage: %s [LANGID-{GUID}] [-k|--keyboard <open|close>] [-c|--conversion-mode <alphamumeric|native[,...]>] [--if <LANGID-{GUID}>] [--else <LANGID-{GUID}>] [-o FILE]", exeName);
+    println("Usage: %s [LANGID-{GUID}] [-k|--keyboard <open|close>] [-c|--conversion-mode <alphanumeric|native[,...]>] [-g|--get-keyboard] [--if <LANGID-{GUID}>] [--else <LANGID-{GUID}>] [-o FILE]", exeName);
     println("       %s -l|--list", exeName);
     println("       %s", exeName);
     return ERR_INVALID_ARGUMENTS;
@@ -308,6 +308,8 @@ int main(int argc, const char *argv[]) {
         pSharedData->keyboardOpenClose = *args.keyboardOpenClose;
     }
 
+    pSharedData->getKeyboardState = args.getKeyboardState;
+
     if (args.conversionMode) {
         const char* mode = strtok((char*)args.conversionMode, ",");
         while (mode != NULL && !err) {
@@ -428,7 +430,28 @@ int main(int argc, const char *argv[]) {
         }
     }
 
-    if (!err) {
+    if (!err && args.getKeyboardState) {
+        if (pSharedData->keyboardOpenClose.has_value()) {
+            FILE* outfile = stdout;
+            if (args.outputFile) {
+                outfile = fopen(args.outputFile, "w");
+            }
+            if (outfile) {
+                if (*pSharedData->keyboardOpenClose) {
+                    if (pSharedData->conversionModeNative.has_value() && *pSharedData->conversionModeNative) {
+                        fprintln(outfile, "open native");
+                    } else {
+                        fprintln(outfile, "open alphanumeric");
+                    }
+                } else {
+                    fprintln(outfile, "close");
+                }
+                if (args.outputFile) {
+                    fclose(outfile);
+                }
+            }
+        }
+    } else if (!err) {
         if (pSharedData->langid && pSharedData->guidProfile) {
             FILE* outfile = stdout;
             if (args.outputFile) {
