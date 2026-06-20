@@ -146,7 +146,7 @@ extern "C" __declspec(dllexport) LRESULT CALLBACK IMControl_WndProcHook(int nCod
                         VARIANT varKeyboardOpenClose;
                         VariantInit(&varKeyboardOpenClose);
                         hrGet = keyboardOpenCloseCompartment->GetValue(&varKeyboardOpenClose);
-                        if (SUCCEEDED(hrGet)) {
+                        if (SUCCEEDED(hrGet) && (varKeyboardOpenClose.vt == VT_I4 || varKeyboardOpenClose.vt == VT_UI4)) {
                             g_pSharedData->keyboardOpenClose = (varKeyboardOpenClose.lVal != 0);
                         }
                         VariantClear(&varKeyboardOpenClose);
@@ -161,7 +161,7 @@ extern "C" __declspec(dllexport) LRESULT CALLBACK IMControl_WndProcHook(int nCod
                         VARIANT varConv;
                         VariantInit(&varConv);
                         hrGet = conversionCompartment->GetValue(&varConv);
-                        if (SUCCEEDED(hrGet)) {
+                        if (SUCCEEDED(hrGet) && (varConv.vt == VT_I4 || varConv.vt == VT_UI4)) {
                             g_pSharedData->conversionModeNative = (varConv.lVal & TF_CONVERSIONMODE_NATIVE) != 0;
                         }
                         VariantClear(&varConv);
@@ -175,8 +175,7 @@ extern "C" __declspec(dllexport) LRESULT CALLBACK IMControl_WndProcHook(int nCod
                 if (pThreadMgrGet) {
                     pThreadMgrGet->Release();
                 }
-                // Restore hr to previous value so get-keyboard failures don't affect overall success
-                hr = S_OK;
+                // Intentionally do not modify `hr` here: get-keyboard failures should not override prior errors.
             }
 
             if ((g_pSharedData->verb == VERB_SWITCH) && !g_pSharedData->getKeyboardState && (g_pSharedData->keyboardOpenClose || g_pSharedData->conversionModeNative)) {

@@ -436,6 +436,10 @@ int main(int argc, const char *argv[]) {
             if (args.outputFile) {
                 outfile = fopen(args.outputFile, "w");
             }
+            if (!outfile && args.outputFile) {
+                eprintln("%s: fopen(\"%s\") failed with 0x%lx.", argv[0], args.outputFile, GetLastError());
+                LOG_ERROR("fopen(\"%s\") failed with 0x%lx", args.outputFile, GetLastError());
+            }
             if (outfile) {
                 if (*pSharedData->keyboardOpenClose) {
                     if (pSharedData->conversionModeNative.has_value() && *pSharedData->conversionModeNative) {
@@ -448,8 +452,12 @@ int main(int argc, const char *argv[]) {
                 }
                 if (args.outputFile) {
                     fclose(outfile);
-                }
             }
+        } else {
+            eprintln("%s: Failed to query keyboard state.", argv[0]);
+            LOG_ERROR("Failed to query keyboard state");
+            err = ERR_QUERY_KEYBOARD_STATE;
+        }
         }
     } else if (!err) {
         if (pSharedData->langid && pSharedData->guidProfile) {
