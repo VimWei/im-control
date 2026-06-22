@@ -167,7 +167,25 @@ int main(int argc, const char *argv[]) {
 
     logInit("main");
 
-    // Open shared memory for data sharing, and also for ensuring only one instance is running.
+    // Use a named mutex for serialization (auto-released when process dies,
+    // unlike file mapping which can leak when hook DLL remains in target)
+    HANDLE hMutex = CreateMutexA(NULL, FALSE, "Local\\IMControlMutex");
+    if (hMutex == NULL) {
+        eprintln("%s: CreateMutex() failed with 0x%lx.", argv[0], GetLastError());
+        LOG_ERROR("CreateMutex() failed with 0x%lx", GetLastError());
+        err = ERR_CREATE_MUTEX;
+    }
+    if (!err) {
+        DWORD dwMutexResult = WaitForSingleObject(hMutex, 10000);
+        if (dwMutexResult != WAIT_OBJECT_0) {
+            eprintln("%s: Timed out waiting for mutex.", argv[0]);
+            LOG_ERROR("Timed out waiting for mutex");
+            CloseHandle(hMutex);
+            return ERR_MUTEX_TIMEOUT;
+        }
+    }
+
+    // Open shared memory for data sharing (no longer used as singleton guard)
     HANDLE hMapFile = CreateFileMapping(INVALID_HANDLE_VALUE,
                                         NULL,
                                         PAGE_READWRITE,
@@ -178,12 +196,6 @@ int main(int argc, const char *argv[]) {
         eprintln("%s: CreateFileMapping failed with 0x%lx.", argv[0], GetLastError());
         LOG_ERROR("CreateFileMapping failed with 0x%lx", GetLastError());
         err = ERR_CREATE_FILE_MAPPING;
-    }
-    if (!err) {
-        if (GetLastError() == ERROR_ALREADY_EXISTS) {
-            CloseHandle(hMapFile);
-            return ERR_ALREADY_RUNNING;
-        }
     }
 
     SharedData* pSharedData = NULL;
@@ -203,11 +215,16 @@ int main(int argc, const char *argv[]) {
         }
     }
 
-    HANDLE hEvent = CreateEventA(NULL, TRUE, FALSE, "Local\\IMControlDoneEvent");
-    if (hEvent == NULL) {
-        eprintln("%s: CreateEventA() failed with 0x%lx.", argv[0], GetLastError());
-        LOG_ERROR("CreateEventA() failed with 0x%lx", GetLastError());
-        err = ERR_CREATE_EVENT;
+    HANDLE hEvent = NULL;
+    if (!err) {
+        hEvent = CreateEventA(NULL, TRUE, FALSE, "Local\\IMControlDoneEvent");
+        if (hEvent == NULL) {
+            eprintln("%s: CreateEventA() failed with 0x%lx.", argv[0], GetLastError());
+            LOG_ERROR("CreateEventA() failed with 0x%lx", GetLastError());
+            err = ERR_CREATE_EVENT;
+        } else {
+            ResetEvent(hEvent);
+        }
     }
 
     HWND hForegroundWindow = NULL;
@@ -405,7 +422,7 @@ int main(int argc, const char *argv[]) {
 
     if (!err) {
         LOG_INFO("Waiting for injector to finish...");
-        DWORD dwWaitResult = WaitForSingleObject(hEvent, INFINITE);
+        DWORD dwWaitResult = WaitForSingleObject(hEvent, 10000);
         switch (dwWaitResult) {
             case WAIT_OBJECT_0:
                 LOG_INFO("Injector finished.");
@@ -414,6 +431,11 @@ int main(int argc, const char *argv[]) {
                     eprintln("%s: hook exited with code %d.", argv[0], err);
                     LOG_ERROR("injector exited with code %d", err);
                 }
+                break;
+            case WAIT_TIMEOUT:
+                eprintln("%s: Timed out waiting for injector (10s).", argv[0]);
+                LOG_ERROR("Timed out waiting for injector (10s)");
+                err = ERR_SEND_MESSAGE_TIMEOUT_TIMED_OUT;
                 break;
             case WAIT_FAILED:
                 eprintln("%s: WaitForSingleObject() failed with 0x%lx.", argv[0], GetLastError());
@@ -469,6 +491,10 @@ int main(int argc, const char *argv[]) {
     }
     if (hMapFile != NULL) {
         CloseHandle(hMapFile);
+    }
+    if (hMutex != NULL) {
+        ReleaseMutex(hMutex);
+        CloseHandle(hMutex);
     }
 
     LOG_INFO("Exiting with code %d", err);
