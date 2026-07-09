@@ -21,7 +21,7 @@ public:
                 filename += '\\';
                 filename += name;
                 filename += ".log";
-                m_file = fopen(filename.c_str(), "a");
+                m_file = fopen(filename.c_str(), "w");
             }
         }
     }

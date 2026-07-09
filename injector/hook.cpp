@@ -207,7 +207,6 @@ extern "C" __declspec(dllexport) LRESULT CALLBACK IMControl_WndProcHook(int nCod
                 pThreadMgr = GetThreadMgrSingleton();
                 hr = pThreadMgr ? S_OK : E_FAIL;
                 if (SUCCEEDED(hr)) {
-                    LOG_INFO("TF_GetThreadMgr returned pThreadMgr=%p, threadId=%lu", (void*)pThreadMgr, GetCurrentThreadId());
                     hr = pThreadMgr->QueryInterface(IID_ITfCompartmentMgr, (void**)&pCompartmentMgr);
                 } else {
                     LOG_ERROR("ERROR: GetThreadMgrSingleton() failed");
@@ -217,8 +216,6 @@ extern "C" __declspec(dllexport) LRESULT CALLBACK IMControl_WndProcHook(int nCod
                     hr = pThreadMgr->Activate(&clientId);
                     if (FAILED(hr)) {
                         LOG_ERROR("ERROR: ITfThreadMgr::Activate() failed with 0x%0lx", hr);
-                    } else {
-                        LOG_INFO("Activated TfClientId = %lu", clientId);
                     }
                 }
 
@@ -294,17 +291,10 @@ extern "C" __declspec(dllexport) LRESULT CALLBACK IMControl_WndProcHook(int nCod
                             } else {
                                 newMode &= ~TF_CONVERSIONMODE_NATIVE;
                             }
-                            LOG_INFO("CONV SetValue: oldMode=0x%lX (NATIVE=%d), newMode=0x%lX (NATIVE=%d), clientId=%lu, changed=%d",
-                                oldMode, (oldMode & TF_CONVERSIONMODE_NATIVE) ? 1 : 0,
-                                newMode, (newMode & TF_CONVERSIONMODE_NATIVE) ? 1 : 0,
-                                clientId, (oldMode != newMode) ? 1 : 0);
                             if (newMode != oldMode) {
                                 varKeyboardInputModeConversion.vt = VT_I4;
                                 varKeyboardInputModeConversion.lVal = newMode;
                                 hr = keyboardInputModeConversionCompartment->SetValue(clientId, &varKeyboardInputModeConversion);
-                                LOG_INFO("CONV SetValue done: hr=0x%lX", hr);
-                            } else {
-                                LOG_INFO("CONV SetValue: skipped (unchanged)");
                             }
                         } else {
                             LOG_ERROR("ERROR: GetValue() failed with 0x%0lx", hr);
