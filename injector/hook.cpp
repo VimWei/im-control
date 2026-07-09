@@ -5,6 +5,33 @@
 #include "shared_data.hpp"
 #include "log.hpp"
 
+// TF_GetThreadMgr is exported by msctf.dll as a per-thread ThreadMgr singleton.
+// On Windows 11, CoCreateInstance(CLSID_TF_ThreadMgr) returns a NEW instance
+// instead of the per-thread singleton, so compartment writes don't trigger
+// OnChange notifications on sinks registered on the framework-provided instance.
+// TF_GetThreadMgr reliably returns the per-thread singleton on both Win10/Win11.
+typedef HRESULT(WINAPI* PFN_TF_GetThreadMgr)(ITfThreadMgr**);
+
+static ITfThreadMgr* GetThreadMgrSingleton() {
+    HMODULE hMsctf = GetModuleHandleW(L"msctf.dll");
+    if (!hMsctf) {
+        hMsctf = LoadLibraryW(L"msctf.dll");
+    }
+    if (!hMsctf) {
+        return nullptr;
+    }
+    auto pfn = (PFN_TF_GetThreadMgr)GetProcAddress(hMsctf, "TF_GetThreadMgr");
+    if (!pfn) {
+        return nullptr;
+    }
+    ITfThreadMgr* pThreadMgr = nullptr;
+    HRESULT hr = pfn(&pThreadMgr);
+    if (FAILED(hr) || !pThreadMgr) {
+        return nullptr;
+    }
+    return pThreadMgr;
+}
+
 static HANDLE g_hMapFile = NULL;
 static HANDLE g_hEvent = NULL;
 static SharedData* g_pSharedData = NULL;
@@ -131,11 +158,8 @@ extern "C" __declspec(dllexport) LRESULT CALLBACK IMControl_WndProcHook(int nCod
                 ITfThreadMgr* pThreadMgrGet = NULL;
                 ITfCompartmentMgr* pCompartmentMgrGet = nullptr;
 
-                HRESULT hrGet = CoCreateInstance(CLSID_TF_ThreadMgr,
-                                                  NULL,
-                                                  CLSCTX_INPROC_SERVER,
-                                                  IID_ITfThreadMgr,
-                                                  (void**)&pThreadMgrGet);
+                pThreadMgrGet = GetThreadMgrSingleton();
+                HRESULT hrGet = pThreadMgrGet ? S_OK : E_FAIL;
                 if (SUCCEEDED(hrGet)) {
                     hrGet = pThreadMgrGet->QueryInterface(IID_ITfCompartmentMgr, (void**)&pCompartmentMgrGet);
                 }
@@ -180,15 +204,12 @@ extern "C" __declspec(dllexport) LRESULT CALLBACK IMControl_WndProcHook(int nCod
             }
 
             if ((g_pSharedData->verb == VERB_SWITCH) && !g_pSharedData->getKeyboardState && (g_pSharedData->keyboardOpenClose || g_pSharedData->conversionModeNative)) {
-                hr = CoCreateInstance(CLSID_TF_ThreadMgr,
-                                      NULL,
-                                      CLSCTX_INPROC_SERVER,
-                                      IID_ITfThreadMgr,
-                                      (void**)&pThreadMgr);
+                pThreadMgr = GetThreadMgrSingleton();
+                hr = pThreadMgr ? S_OK : E_FAIL;
                 if (SUCCEEDED(hr)) {
                     hr = pThreadMgr->QueryInterface(IID_ITfCompartmentMgr, (void**)&pCompartmentMgr);
                 } else {
-                    LOG_ERROR("ERROR: CoCreateInstance(CLSID_TF_ThreadMgr) failed with 0x%0lx", hr);
+                    LOG_ERROR("ERROR: GetThreadMgrSingleton() failed");
                 }
 
                 if (SUCCEEDED(hr)) {
