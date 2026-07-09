@@ -94,3 +94,29 @@ im-control --if 0804-{RIME-GUID} 0409-{ENG-GUID} --else 0804-{RIME-GUID}
 
 对于需要在应用不同模式下保持 IME 激活但切换模式的场景，使用 `-c alphanumeric`；
 对于完全不需要 IME 的场景，使用 `-k close`。
+
+## Windows 11 兼容性注意事项
+
+im-control 在 Windows 10 和 Windows 11 下均可用，但 Windows 11 的 TSF 框架行为有以下差异，已在代码中处理：
+
+1. **ThreadMgr 实例**：Windows 11 的 `CoCreateInstance(CLSID_TF_ThreadMgr)` 返回新实例而非 per-thread 单例。im-control 使用 `TF_GetThreadMgr`（msctf.dll 导出）获取正确的单例。
+2. **TfClientId 验证**：Windows 11 仅为已激活客户端（非零 `TfClientId`）的 `SetValue` 触发 `OnChange`。im-control 调用 `ITfThreadMgr::Activate` 获取有效 ID。
+
+### 与 Weasel (RIME) 配合使用
+
+WeaselTSF 的 CONVERSION 和 OPENCLOSE 两个 compartment 独立运作：
+
+- **切换中英文**：只写 CONVERSION（`-c native` / `-c alphanumeric`），不写 OPENCLOSE
+- **启用/禁用 IME**：只写 OPENCLOSE（`-k open` / `-k close`），不写 CONVERSION
+
+避免同时写两个 compartment，否则可能触发 OPENCLOSE handler 的 blind toggle，导致中英状态反转。
+
+如需同时切换输入法和中英文模式，建议分两次调用：
+```bash
+im-control 0804-{GUID}          # 先切换输入法
+im-control -c alphanumeric      # 再切换模式
+```
+
+### 相关文档
+
+- [Weasel compartment 外部控制修复分析](https://github.com/VimWei/weasel/blob/im-control/docs/compartment-external-control-fix.md) — 完整的根因分析和修复方案
