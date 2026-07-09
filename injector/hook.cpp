@@ -195,14 +195,8 @@ extern "C" __declspec(dllexport) LRESULT CALLBACK IMControl_WndProcHook(int nCod
                     hr = pThreadMgr->Activate(&clientId);
                     if (FAILED(hr)) {
                         LOG_ERROR("ERROR: ITfThreadMgr::Activate() failed with 0x%0lx", hr);
-                        wchar_t dbgbuf[256];
-                        swprintf_s(dbgbuf, 256, L"[im-control] Activate FAILED hr=0x%lX\n", hr);
-                        OutputDebugStringW(dbgbuf);
                     } else {
                         LOG_INFO("Activated TfClientId = %lu", clientId);
-                        wchar_t dbgbuf[256];
-                        swprintf_s(dbgbuf, 256, L"[im-control] Activate OK clientId=%lu\n", clientId);
-                        OutputDebugStringW(dbgbuf);
                     }
                 }
 
@@ -278,27 +272,17 @@ extern "C" __declspec(dllexport) LRESULT CALLBACK IMControl_WndProcHook(int nCod
                             } else {
                                 newMode &= ~TF_CONVERSIONMODE_NATIVE;
                             }
-                            {
-                                wchar_t dbgbuf[512];
-                                swprintf_s(dbgbuf, 512,
-                                    L"[im-control] CONV SetValue: oldMode=0x%lX (NATIVE=%d), newMode=0x%lX (NATIVE=%d), clientId=%lu, changed=%d\n",
-                                    oldMode, (oldMode & TF_CONVERSIONMODE_NATIVE) ? 1 : 0,
-                                    newMode, (newMode & TF_CONVERSIONMODE_NATIVE) ? 1 : 0,
-                                    clientId, (oldMode != newMode) ? 1 : 0);
-                                OutputDebugStringW(dbgbuf);
-                            }
+                            LOG_INFO("CONV SetValue: oldMode=0x%lX (NATIVE=%d), newMode=0x%lX (NATIVE=%d), clientId=%lu, changed=%d",
+                                oldMode, (oldMode & TF_CONVERSIONMODE_NATIVE) ? 1 : 0,
+                                newMode, (newMode & TF_CONVERSIONMODE_NATIVE) ? 1 : 0,
+                                clientId, (oldMode != newMode) ? 1 : 0);
                             if (newMode != oldMode) {
                                 varKeyboardInputModeConversion.vt = VT_I4;
                                 varKeyboardInputModeConversion.lVal = newMode;
                                 hr = keyboardInputModeConversionCompartment->SetValue(clientId, &varKeyboardInputModeConversion);
-                                {
-                                    wchar_t dbgbuf[256];
-                                    swprintf_s(dbgbuf, 256,
-                                        L"[im-control] CONV SetValue done: hr=0x%lX\n", hr);
-                                    OutputDebugStringW(dbgbuf);
-                                }
+                                LOG_INFO("CONV SetValue done: hr=0x%lX", hr);
                             } else {
-                                OutputDebugStringW(L"[im-control] CONV SetValue: skipped (unchanged)\n");
+                                LOG_INFO("CONV SetValue: skipped (unchanged)");
                             }
                         } else {
                             LOG_ERROR("ERROR: GetValue() failed with 0x%0lx", hr);
@@ -355,7 +339,7 @@ INT APIENTRY DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved) {
 #ifdef _WIN64
             logInit("hook64");
 #else
-            // logInit("hook32");
+            logInit("hook32");
 #endif
             g_hMapFile = OpenFileMapping(FILE_MAP_ALL_ACCESS, FALSE, SHARED_DATA_NAME);
             if (g_hMapFile == NULL) {
