@@ -207,6 +207,7 @@ extern "C" __declspec(dllexport) LRESULT CALLBACK IMControl_WndProcHook(int nCod
                 pThreadMgr = GetThreadMgrSingleton();
                 hr = pThreadMgr ? S_OK : E_FAIL;
                 if (SUCCEEDED(hr)) {
+                    LOG_INFO("TF_GetThreadMgr returned pThreadMgr=%p, threadId=%lu", (void*)pThreadMgr, GetCurrentThreadId());
                     hr = pThreadMgr->QueryInterface(IID_ITfCompartmentMgr, (void**)&pCompartmentMgr);
                 } else {
                     LOG_ERROR("ERROR: GetThreadMgrSingleton() failed");
