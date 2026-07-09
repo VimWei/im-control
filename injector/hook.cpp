@@ -35,6 +35,23 @@ static ITfThreadMgr* GetThreadMgrSingleton() {
 static HANDLE g_hMapFile = NULL;
 static HANDLE g_hEvent = NULL;
 static SharedData* g_pSharedData = NULL;
+static bool g_isToOpenClose = false;
+
+static bool ReadToggleImeOnOpenClose() {
+    HKEY hKey;
+    if (RegOpenKeyExA(HKEY_CURRENT_USER, "Software\\Rime\\weasel", 0, KEY_READ, &hKey) != ERROR_SUCCESS)
+        return false;
+    char value[8] = {0};
+    DWORD valueSize = sizeof(value);
+    DWORD type = 0;
+    bool result = false;
+    if (RegQueryValueExA(hKey, "ToggleImeOnOpenClose", NULL, &type, (LPBYTE)value, &valueSize) == ERROR_SUCCESS
+        && type == REG_SZ) {
+        result = (_stricmp(value, "yes") == 0);
+    }
+    RegCloseKey(hKey);
+    return result;
+}
 
 extern "C" __declspec(dllexport) LRESULT CALLBACK IMControl_WndProcHook(int nCode, WPARAM wParam, LPARAM lParam) {
     if (nCode >= 0) {
@@ -307,6 +324,25 @@ extern "C" __declspec(dllexport) LRESULT CALLBACK IMControl_WndProcHook(int nCod
                             keyboardInputModeConversionCompartment->Release();
                         }
                     }
+
+                    if (g_isToOpenClose && g_pSharedData->conversionModeNative && !g_pSharedData->keyboardOpenClose) {
+                        ITfCompartment* ocCompartment = nullptr;
+                        HRESULT hrOC = pCompartmentMgr->GetCompartment(GUID_COMPARTMENT_KEYBOARD_OPENCLOSE, &ocCompartment);
+                        if (SUCCEEDED(hrOC)) {
+                            VARIANT varOC;
+                            VariantInit(&varOC);
+                            hrOC = ocCompartment->GetValue(&varOC);
+                            if (SUCCEEDED(hrOC) && (varOC.vt == VT_I4 || varOC.vt == VT_UI4) && varOC.lVal == 0) {
+                                VARIANT varSet;
+                                VariantInit(&varSet);
+                                varSet.vt = VT_I4;
+                                varSet.lVal = 1;
+                                ocCompartment->SetValue(clientId, &varSet);
+                            }
+                            VariantClear(&varOC);
+                            ocCompartment->Release();
+                        }
+                    }
                 } else {
                     LOG_ERROR("ERROR: QueryInterface(IID_ITfCompartmentMgr) failed with 0x%0lx", hr);
                 }
@@ -379,6 +415,8 @@ INT APIENTRY DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved) {
                 g_hMapFile = NULL;
                 return FALSE;
             }
+
+            g_isToOpenClose = ReadToggleImeOnOpenClose();
 
             break;
         case DLL_PROCESS_DETACH:
